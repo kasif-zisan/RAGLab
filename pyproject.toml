@@ -1,0 +1,28 @@
+[project]
+name = "raglab"
+version = "0.1.0"
+description = "Hands-on RAG build: naive -> hybrid -> rerank -> RAGAS, measured at each step"
+authors = [
+    { name = "Kasif Hasnaen Zisan", email = "zisan321@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "faiss-cpu>=1.15.0",
+    "langchain>=1.4.0",
+    "langchain-aws>=1.7.5",
+    "langchain-community>=0.4.2",
+    "langchain-text-splitters>=1.1.2",
+    "pandas>=3.0.5",
+    "pdfplumber>=0.11.10",
+    "pymupdf>=1.28.2",
+    "pypdf>=6.17.0",
+    "ragas>=0.4.3",
+    "rank-bm25>=0.2.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = true
