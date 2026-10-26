@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCorpusJobModelsAndChunks",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::raglab-zisan-apne1/manifest.json",
+        "arn:aws:s3:::raglab-zisan-apne1/pdf/*",
+        "arn:aws:s3:::raglab-zisan-apne1/job/*",
+        "arn:aws:s3:::raglab-zisan-apne1/models/*",
+        "arn:aws:s3:::raglab-zisan-apne1/chunks/*"
+      ]
+    },
+    {
+      "Sid": "WriteOutputLogsSeedModelsAndVectors",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": [
+        "arn:aws:s3:::raglab-zisan-apne1/parsed/*",
+        "arn:aws:s3:::raglab-zisan-apne1/logs/*",
+        "arn:aws:s3:::raglab-zisan-apne1/models/*",
+        "arn:aws:s3:::raglab-zisan-apne1/vectors/*",
+        "arn:aws:s3:::raglab-zisan-apne1/bench/*",
+        "arn:aws:s3:::raglab-zisan-apne1/errors/*"
+      ]
+    },
+    {
+      "Sid": "ListOnlyThisBucket",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::raglab-zisan-apne1"
+    }
+  ]
+}

@@ -18,12 +18,68 @@ holding both is a different experiment, the "arm C" dual-view idea, and it
 answers a different question.)
 """
 
+import json
 from dataclasses import dataclass
 
 from langchain_core.documents import Document
 
 from raglab.chunking import chunk
 from raglab.corpus import load_filings, load_pages
+
+
+@dataclass(frozen=True)
+class Embedding:
+    """Embedding settings — SHARED by every arm, deliberately.
+
+    These are not per-arm fields. The experiment compares parsers and chunking.
+    If the arms also differed in embedding settings, a score gap could not be
+    attributed to either cause. Everything that is not the thing under test is
+    held constant.
+
+    dimensions
+        Titan v2 accepts 1024 (default), 512 or 256. AWS reports 512 and 256
+        retain 99.0% and 96.8% of 1024's retrieval performance. We use 1024,
+        for two reasons. First, dimension does NOT change the bill - Bedrock
+        charges per INPUT TOKEN, so a 256-dim vector costs exactly the same to
+        generate; the only saving is storage, and storage here is 561 MB across
+        both arms, which is nothing. Second, and more important: we are running
+        this to MEASURE retrieval quality. The arms differ by ~4 points with a
+        +/-3 point uncertainty, so accepting up to 3.2% of dimension-induced
+        loss would sit on top of the signal and we could not separate causes.
+
+    normalize
+        Defaults to true and is what AWS recommends for RAG. On unit-length
+        vectors cosine similarity and inner product rank identically, so search
+        can use the cheaper dot product.
+
+    The SAME settings must build the index and the query vectors. A dimension
+    mismatch does not degrade gracefully - it either errors or silently returns
+    nonsense, which is worse. That is why this lives in one place and why
+    `body()` is the only thing that constructs a request.
+    """
+
+    model_id: str = "amazon.titan-embed-text-v2:0"
+    region: str = "ap-northeast-1"
+    dimensions: int = 1024
+    normalize: bool = True
+
+    def body(self, text: str) -> str:
+        """The exact Bedrock payload. One constructor, so index-time and
+        query-time settings cannot drift apart."""
+        return json.dumps(
+            {
+                "inputText": text,
+                "dimensions": self.dimensions,
+                "normalize": self.normalize,
+            }
+        )
+
+    @property
+    def bytes_per_vector(self) -> int:
+        return self.dimensions * 4  # float32
+
+
+EMBED = Embedding()
 
 
 @dataclass(frozen=True)
@@ -51,6 +107,11 @@ class Arm:
     def slug(self) -> str:
         """Stable filename stem for this arm's vectors and scores."""
         return f"{self.name}_{self.chunk_size}_ov{self.overlap}"
+
+    def index_mb(self, embed: Embedding = EMBED) -> float:
+        """Vector store size for this arm, as float32. Printed before any run
+        so an unexpected number is caught before the embedding bill, not after."""
+        return self.chunks * embed.bytes_per_vector / 1e6
 
 
 # What we are building indexes for.
