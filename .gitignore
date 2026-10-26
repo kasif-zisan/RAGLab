@@ -15,6 +15,10 @@ wheels/
 !.env.example
 
 
+# Corpus and generated artefacts: large, regenerable from scripts/stage_corpus.py
 data/
-docs/
-notes/
+
+# docs/ and notes/ are deliberately TRACKED. They are plain text, they are the
+# reasoning behind every choice, and they are the one thing that cannot be
+# regenerated. notes/decisions.md in particular is what makes the work
+# defensible months later. They were ignored here by mistake.

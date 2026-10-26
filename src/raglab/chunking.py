@@ -189,13 +189,34 @@ def split_markdown(text: str, chunk_size: int, overlap: int) -> list[str]:
     flush_prose()
 
     # Pack units greedily. A unit is never cut here - it was already sized.
+    #
+    # Overlap: this loop used to clear the buffer on every emit, so arm A had NO
+    # overlap between chunks at all - measured mean 5 characters against 180
+    # requested, and the 5 was leakage from splitting runs of prose. That was an
+    # unflagged design choice. Tables do not need overlap (they are kept whole on
+    # purpose), but prose boundaries got no protection either. So trailing units
+    # now carry forward up to the overlap budget, and only when the chunk ended
+    # because it was full - carrying across a heading change would paste one
+    # section's text under another section's title.
     chunks, cur, cur_head, cur_len = [], [], None, 0
     for h, u in units:
         crumb = f"{h}\n\n" if h else ""
         add = len(u) + 1
         if cur and (cur_len + add > chunk_size or h != cur_head):
             chunks.append((f"{cur_head}\n\n" if cur_head else "") + "\n".join(cur))
-            cur, cur_len = [], 0
+            keep, total = [], 0
+            if overlap > 0 and h == cur_head:
+                for prev in reversed(cur):
+                    # never carry the WHOLE buffer: that makes no forward
+                    # progress and the packer would stall on one unit forever
+                    if len(keep) == len(cur) - 1:
+                        break
+                    if total + len(prev) + 1 > overlap:
+                        break
+                    keep.insert(0, prev)
+                    total += len(prev) + 1
+            cur = keep
+            cur_len = (len(crumb) + total) if keep else 0
         cur_head = h
         if not cur:
             cur_len = len(crumb)
