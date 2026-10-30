@@ -138,7 +138,18 @@ def main():
     # arm+model is identical whoever computed it, so the FIRST description wins
     # and a later run must not clobber it.
     if sh(f"aws s3 ls {DEST}/meta.json --region ap-northeast-1 2>/dev/null || true").strip():
-        print("meta.json already present - leaving it alone", flush=True)
+        # Resuming. SHARD must match what the existing shards were written with:
+        # shard 5 covers chunks 10000-11999 at SHARD=2000 but 5000-5999 at
+        # SHARD=1000, so a changed value makes done_shards() skip ranges that
+        # were never embedded while the file present holds different rows.
+        # Nothing errors anywhere - the index is just quietly wrong.
+        sh(f"aws s3 cp {DEST}/meta.json {WORK}/prev.json --region ap-northeast-1")
+        prev = json.loads((WORK / "prev.json").read_text())
+        for k, mine in (("shard_size", SHARD), ("model", MODEL), ("chunks", n)):
+            if prev.get(k) != mine:
+                sys.exit(f"REFUSING to resume: existing shards have {k}={prev.get(k)!r}, "
+                         f"this run has {mine!r}. Delete {DEST}/ or match the old value.")
+        print("meta.json already present and consistent - leaving it alone", flush=True)
     else:
         (WORK / "meta.json").write_text(json.dumps(meta, indent=2))
         sh(f"aws s3 cp {WORK}/meta.json {DEST}/meta.json --region ap-northeast-1")

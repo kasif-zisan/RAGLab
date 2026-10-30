@@ -35,14 +35,19 @@ while [ $# -gt 0 ]; do
     --az)   AZ=$2;  shift 2 ;;
     --job)  JOB=$2; shift 2 ;;
     --arm)  ARM=$2; SHUTDOWN=true; shift 2 ;;   # a single-arm run is unattended
+    --shutdown) SHUTDOWN=true; shift ;;         # unattended without an --arm
+    --lifetime) LIFETIME=$2; shift 2 ;;         # deadman minutes; keep it near the job length
     --keep) SHUTDOWN=false; shift ;;
     *)     TYPE=$1; shift ;;
   esac
 done
 
-AMI=$(aws ssm get-parameter "${P[@]}" \
-  --name /aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id \
-  --query 'Parameter.Value' --output text)
+# A CPU instance has no use for the 75 GB Deep Learning AMI and its CUDA stack.
+case "$TYPE" in
+  g*|p*|inf*|trn*) AMI_PARAM=/aws/service/deeplearning/ami/x86_64/base-oss-nvidia-driver-gpu-ubuntu-24.04/latest/ami-id; VOL=100; ALLOW_CPU=0 ;;
+  *)               AMI_PARAM=/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id; VOL=40; ALLOW_CPU=1 ;;
+esac
+AMI=$(aws ssm get-parameter "${P[@]}" --name "$AMI_PARAM" --query 'Parameter.Value' --output text)
 SG=sg-07468a8f471d43f07
 case "$AZ" in
   1a) SUBNET=subnet-0854039f1813e07ab ;;
@@ -71,7 +76,7 @@ echo "ami=$AMI  type=$TYPE  az=$AZ  SPOT \$$PRICE/hr  job=$JOB  arm=${ARM:-<from
 # resolving it there silently wrote null and lost the provenance of the vectors.
 UD=$(mktemp); {
   echo "#!/bin/bash"
-  echo "export JOB=$JOB ARM='$ARM' MODEL='$MODEL' SHUTDOWN=$SHUTDOWN LIFETIME=$LIFETIME"
+  echo "export JOB=$JOB ARM='$ARM' MODEL='$MODEL' SHUTDOWN=$SHUTDOWN LIFETIME=$LIFETIME ALLOW_CPU=$ALLOW_CPU"
   echo "export GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null)"
   tail -n +2 infra/bootstrap_embed.sh
 } > "$UD"
@@ -82,7 +87,7 @@ ID=$(aws ec2 run-instances "${P[@]}" \
   --iam-instance-profile Name=raglab-ec2-parser \
   --instance-initiated-shutdown-behavior terminate \
   --instance-market-options 'MarketType=spot,SpotOptions={SpotInstanceType=one-time,InstanceInterruptionBehavior=terminate}' \
-  --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":100,"VolumeType":"gp3","DeleteOnTermination":true}}]' \
+  --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":'"$VOL"',"VolumeType":"gp3","DeleteOnTermination":true}}]' \
   --user-data "file://$UD" \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=raglab-phase7-embed},{Key=Project,Value=raglab}]' \
   --query 'Instances[0].InstanceId' --output text)

@@ -2,7 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ReadCorpusJobModelsAndChunks",
+      "Sid": "ReadCorpusJobModelsChunksAndQuestions",
       "Effect": "Allow",
       "Action": "s3:GetObject",
       "Resource": [
@@ -10,13 +10,17 @@
         "arn:aws:s3:::raglab-zisan-apne1/pdf/*",
         "arn:aws:s3:::raglab-zisan-apne1/job/*",
         "arn:aws:s3:::raglab-zisan-apne1/models/*",
-        "arn:aws:s3:::raglab-zisan-apne1/chunks/*"
+        "arn:aws:s3:::raglab-zisan-apne1/chunks/*",
+        "arn:aws:s3:::raglab-zisan-apne1/questions/*"
       ]
     },
     {
       "Sid": "WriteOutputLogsSeedModelsAndVectors",
       "Effect": "Allow",
-      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
       "Resource": [
         "arn:aws:s3:::raglab-zisan-apne1/parsed/*",
         "arn:aws:s3:::raglab-zisan-apne1/logs/*",

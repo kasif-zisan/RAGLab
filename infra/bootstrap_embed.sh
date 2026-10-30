@@ -87,8 +87,20 @@ echo "=== deadman: terminates at $(date -Is -d "+$MAX_LIFETIME_MIN minutes") ===
 # A g4dn whose driver did not come up still boots, still runs, and torch simply
 # reports cuda unavailable - the job then silently runs on CPU at ~1/20 the
 # speed. Fail loudly here instead.
-echo "--- nvidia-smi ---"
-nvidia-smi || { echo "FATAL: no NVIDIA driver on a GPU instance"; exit 1; }
+# A GPU box whose driver did not come up still boots and torch just reports
+# cuda unavailable - the job then runs on CPU at ~1/20 speed with no error. So
+# on a GPU instance type this is fatal. On a CPU instance type there is nothing
+# to check, and installing the CUDA wheel would drag in ~2.5 GB for nothing.
+ITYPE=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+          http://169.254.169.254/latest/meta-data/instance-type)
+case "$ITYPE" in
+  g*|p*|inf*|trn*) HAS_GPU=true ;;
+  *)               HAS_GPU=false ;;
+esac
+echo "--- instance type $ITYPE  gpu=$HAS_GPU ---"
+if $HAS_GPU; then
+  nvidia-smi || { echo "FATAL: no NVIDIA driver on a GPU instance"; exit 1; }
+fi
 
 # ---- 1. runtime ----------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
@@ -102,18 +114,23 @@ aws --version
 python3 -m venv "$WORK/venv"
 PIP="$WORK/venv/bin/pip"
 $PIP install -q --upgrade pip
-# Default index on purpose - this wheel carries the CUDA runtime.
-$PIP install -q torch
+if $HAS_GPU; then
+  # Default index on purpose - this wheel carries the CUDA runtime.
+  $PIP install -q torch
+else
+  $PIP install -q --index-url https://download.pytorch.org/whl/cpu torch
+fi
 $PIP install -q sentence-transformers transformers einops boto3 numpy
 echo "--- installed ---"
 "$WORK/venv/bin/python" - <<'PY'
 import torch, sentence_transformers, transformers
 print("torch               ", torch.__version__)
 print("cuda available      ", torch.cuda.is_available())
-print("device              ", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "NONE")
+print("device              ", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
 print("sentence-transformers", sentence_transformers.__version__)
 print("transformers        ", transformers.__version__)
-assert torch.cuda.is_available(), "torch cannot see the GPU"
+import os
+assert torch.cuda.is_available() or os.environ.get("ALLOW_CPU") == "1", "torch cannot see the GPU"
 PY
 
 # ---- 2. model weights (restore only; seeding happens in the trap) ---------
